@@ -234,6 +234,7 @@ class TestUnittests:
             ("set EXP=43", "echo ^!EX^P!", "echo 43"),
             # ("set EXP=43", "echo ^%EXP^%", "echo 43"),  # That's wrong... it actually prints the next line. Ignoring.
             ("set EXP=43", "echo ^!EXP^!", "echo 43"),
+            ("set EXP=43", "echo !EX%nothing%P!", "echo 43"),
         ],
     )
     def test_set_command(var, echo, result):
