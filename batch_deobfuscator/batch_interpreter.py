@@ -980,7 +980,7 @@ class BatchDeobfuscator:
                     stack.append(state)
                     state = "var_s"
                 elif char == "!":
-                    variable_start = len(normalized_com)
+                    variable_start_ex = len(normalized_com)
                     normalized_com += char
                     stack.append(state)
                     state = "var_s_2"
@@ -996,7 +996,7 @@ class BatchDeobfuscator:
                     stack.append("str_s")
                     state = "var_s"  # seen %
                 elif char == "!":
-                    variable_start = len(normalized_com)
+                    variable_start_ex = len(normalized_com)
                     normalized_com += char
                     stack.append("str_s")
                     state = "var_s_2"  # seen !
@@ -1043,8 +1043,8 @@ class BatchDeobfuscator:
             elif state == "var_s_2":
                 if char == "!" and normalized_com[-1] != char:
                     normalized_com += char
-                    value = self.get_value(normalized_com[variable_start:])
-                    normalized_com = normalized_com[:variable_start]
+                    value = self.get_value(normalized_com[variable_start_ex:])
+                    normalized_com = normalized_com[:variable_start_ex]
                     if len(normalized_com) == 0:
                         traits["start_with_var"] = True
                     normalized_com += self.normalize_command(value)
@@ -1052,6 +1052,11 @@ class BatchDeobfuscator:
                     state = stack.pop()
                 elif char == "!":
                     normalized_com += char
+                elif char == "%":
+                    variable_start = len(normalized_com)
+                    normalized_com += char
+                    state = "var_s"
+                    stack.append("var_s_2")
                 elif char == "^":
                     state = "escape"
                     stack.append("var_s_2")
@@ -1077,20 +1082,22 @@ class BatchDeobfuscator:
                         state = "var_s"
                 elif char == "!":
                     if state == "var_s_2":
-                        value = self.get_value(normalized_com[variable_start:])
-                        normalized_com = normalized_com[:variable_start]
+                        value = self.get_value(normalized_com[variable_start_ex:])
+                        normalized_com = normalized_com[:variable_start_ex]
                         if len(normalized_com) == 0:
                             traits["start_with_var"] = True
                         normalized_com += self.normalize_command(value)
                         traits["var_used"] += 1
                         state = stack.pop()
                     else:
-                        variable_start = len(normalized_com) - 1
+                        variable_start_ex = len(normalized_com) - 1
                         stack.append(state)
                         state = "var_s_2"
 
-        if state in ["var_s", "var_s_2"]:
-            normalized_com = normalized_com[:variable_start] + normalized_com[variable_start + 1 :]
+        if state == "var_s":
+            normalized_com = normalized_com[:variable_start] + normalized_com[variable_start + 1:]
+        elif state == "var_s_2":
+            normalized_com = normalized_com[:variable_start_ex] + normalized_com[variable_start_ex + 1:]
         elif state == "escape":
             normalized_com += "^"
 
