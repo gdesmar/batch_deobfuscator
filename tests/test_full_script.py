@@ -44,3 +44,24 @@ http://server.org/data?accept=data >>met\resultat\output.log"""
         rb'curl -X GET --fail -H "Accept: application/octet-stream" '
         rb"http://server.org/data?accept=data >>met\resultat\output.log"
     )
+
+
+def test_no_substituted_quote_command_splitting():
+    deobfuscator = BatchDeobfuscator()
+    script = rb"""set QUO="
+set %QUO%DATA=bla | foo;bar%QUO%"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.NamedTemporaryFile(dir=temp_dir) as tf:
+            tf.write(script)
+            tf.flush()
+            bat_filename, _ = deobfuscator.analyze(tf.name, temp_dir)
+
+        with open(os.path.join(temp_dir, bat_filename), "rb") as f:
+            result = f.read()
+    lines = result.split(b"\r\n")
+
+    assert len(lines) >= 2
+    assert lines[0] == b'set QUO="'
+    # 1. Must not split at |
+    # 2. Must not replace ; by space
+    assert lines[1] == b'set "DATA=bla | foo;bar"'

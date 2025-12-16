@@ -336,30 +336,56 @@ class BatchDeobfuscator:
         if line_is_comment(logical_line):
             yield logical_line.strip()
             return
-        state = "init"
+
+        stack = ["init"]
         counter = 0
         start_command = 0
+        var_start = None
+
         for char in logical_line:
-            # print(f"C:{char}, S:{state}")
+            state = stack[-1]
+
             if state == "init":
-                if char == '"':  # quote is on
-                    state = "str_s"
+                if char == '"':
+                    stack.append("str_s")
+                elif char == "%":
+                    stack.append("var_s")
+                    var_start = counter
                 elif char == "^":
-                    state = "escape"
+                    stack.append("escape")
                 elif char == "&" and logical_line[counter - 1] == ">":
                     # Usually an output redirection, we want to keep it on the same line
                     pass
-                elif char == "&" or char == "|":
+                elif char in ("&", "|"):
                     cmd = logical_line[start_command:counter].strip()
                     if cmd != "":
                         for part in self.get_commands_special_statement(cmd):
                             yield part
                     start_command = counter + 1
+
             elif state == "str_s":
                 if char == '"':
-                    state = "init"
+                    stack.pop()
+                elif char == "%":
+                    stack.append("var_s")
+                    var_start = counter
+
+            elif state == "var_s":
+                if char == "%":
+                    # Inspect variable contents for something that affects parsing
+                    stack.pop()  # get rid of var_s
+                    if var_start < counter:  # at least one character between percents?
+                        value = self.get_value(logical_line[var_start:counter + 1])
+                        if value.count('"') == 1:
+                            if stack[-1] != "str_s":
+                                stack.append("str_s")
+                            else:  # end of quoted data reached
+                                stack.pop()
+                        elif value == "^":
+                            stack.append("escape")
+
             elif state == "escape":
-                state = "init"
+                stack.pop()
 
             counter += 1
 
@@ -951,7 +977,7 @@ class BatchDeobfuscator:
         return value if value else "script.bat"
 
     # pushdown automata
-    def normalize_command(self, command):
+    def normalize_command(self, command, replace_by_space=True):
         if line_is_comment(command):
             return command
 
@@ -965,7 +991,8 @@ class BatchDeobfuscator:
                 if char == '"':  # quote is on
                     state = "str_s"
                     normalized_com += char
-                elif char == "," or char == ";":  # or char == "\t": EDIT: How about we keep those tabs?
+                # or char == "\t": EDIT: How about we keep those tabs?
+                elif (char == "," or char == ";") and replace_by_space:
                     # commas (",") are replaced by spaces, unless they are part of a string in doublequotes
                     # semicolons (";") are replaced by spaces, unless they are part of a string in doublequotes
                     # tabs are replaced by a single space
@@ -1012,9 +1039,16 @@ class BatchDeobfuscator:
                     normalized_com = normalized_com[:variable_start]
                     if len(normalized_com) == 0:
                         traits["start_with_var"] = True
-                    normalized_com += self.normalize_command(value)
+                    normalized_com += self.normalize_command(value, replace_by_space=False)
                     traits["var_used"] += 1
-                    state = stack.pop()
+                    prev = stack.pop()
+                    if value.count('"') == 1:
+                        if prev != "str_s":
+                            state = "str_s"
+                        else:  # end of quoted data reached
+                            state = "init"
+                    else:
+                        state = prev
                 elif char == "%":  # Two % in a row
                     normalized_com += char
                     state = stack.pop()

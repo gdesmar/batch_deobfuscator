@@ -131,6 +131,9 @@ class TestUnittests:
             # ('set EXP=43^"|', "echo *%EXP%*", []),
             # ('set EXP=43"^|', "echo *%EXP%*", 'echo *43"^|*'),
             # ('set EXP=43"^^|', "echo *%EXP%*", 'echo *43"^^|*'),
+            # Comma in value
+            ('set EXP=4,3', "echo *%EXP%*", "echo *4,3*"),
+            ('set "EXP=4,3"', "echo *%EXP%*", "echo *4,3*"),
             # Getting into really weird stuff
             ("set EXP=4=3", "echo *%EXP%*", "echo *4=3*"),
             ('set ""EXP=43"', 'echo *%"EXP%*', "echo *43*"),
@@ -755,3 +758,35 @@ class TestUnittests:
         cmd = 'set "ab= ""'
         res = deobfuscator.normalize_command(cmd)
         assert res == cmd
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        "cmd, command_list",
+        [
+            (
+                'set %QUO%DATA=bla | foo%QUO% & bar',
+                ['set %QUO%DATA=bla | foo%QUO%', 'bar'],
+            ),
+            (
+                'set "DATA=bla | foo%QUO% & bar',
+                ['set "DATA=bla | foo%QUO%', 'bar'],
+            ),
+            (
+                'set %QUO%DATA=bla | foo" & bar',
+                ['set %QUO%DATA=bla | foo"', 'bar'],
+            ),
+        ],
+    )
+    def test_substituted_quotes_command_splitting(cmd, command_list):
+        deobfuscator = BatchDeobfuscator()
+        deobfuscator.interpret_command('set QUO="')
+        res = list(deobfuscator.get_commands(cmd))
+        assert res == command_list
+
+    @staticmethod
+    def test_substituted_escape_command_splitting():
+        deobfuscator = BatchDeobfuscator()
+        deobfuscator.interpret_command('set ESCP=^^')
+        cmd = 'echo a %ESCP%| b'
+        res = list(deobfuscator.get_commands(cmd))
+        assert res == [cmd]
