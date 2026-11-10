@@ -45,6 +45,20 @@ RARE_LOLBAS = [
 ]
 
 
+class CommandArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser for commands found in analyzed scripts.
+
+    The default error() and --help call sys.exit(), which would terminate the host process on malformed input.
+    """
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("add_help", False)
+        super().__init__(*args, **kwargs)
+
+    def error(self, message):
+        raise argparse.ArgumentError(None, message)
+
+
 def line_is_comment(line: str) -> bool:
     if line[:4].strip().lower() == "rem":
         return True
@@ -172,7 +186,7 @@ class BatchDeobfuscator:
             }
 
         # There are 211 lines coming out of curl --help, so we won't parse all the options
-        self.curl_parser = argparse.ArgumentParser()
+        self.curl_parser = CommandArgumentParser()
         # Data could be had multiple time, but since we don't use it, we can ignore it
         self.curl_parser.add_argument(
             "-d",
@@ -204,7 +218,7 @@ class BatchDeobfuscator:
             except argparse.ArgumentError:
                 pass
 
-        self.powershell_invoke_webrequest_parser = argparse.ArgumentParser()
+        self.powershell_invoke_webrequest_parser = CommandArgumentParser()
         # We may need to handle all possible casing for those
         self.powershell_invoke_webrequest_parser.add_argument("-uri", dest="uri")
         self.powershell_invoke_webrequest_parser.add_argument("-outfile", dest="outfile")
@@ -551,7 +565,10 @@ class BatchDeobfuscator:
             # Probably a "No closing quotation"
             # Usually generated from corrupted or non-batch files
             return
-        args, unknown = self.curl_parser.parse_known_args(split_cmd[1:])
+        try:
+            args, unknown = self.curl_parser.parse_known_args(split_cmd[1:])
+        except argparse.ArgumentError:
+            return
 
         url = args.url
         if url[0] == url[-1] in ["'", '"']:
@@ -575,8 +592,11 @@ class BatchDeobfuscator:
 
         if cmd[0].lower() in ["invoke-webrequest", "iwr"]:
             # Parse this more similarly to curl than proper powershell
-            args, unknown = self.powershell_invoke_webrequest_parser.parse_known_args(cmd[1:])
-            if args.uri and args.outfile:
+            try:
+                args, unknown = self.powershell_invoke_webrequest_parser.parse_known_args(cmd[1:])
+            except argparse.ArgumentError:
+                args = None
+            if args and args.uri and args.outfile:
                 self.traits["download"].append((normalized_comm, {"src": args.uri, "dst": args.outfile}))
                 self.modified_filesystem[args.outfile.lower()] = {"type": "download", "src": args.uri}
                 return

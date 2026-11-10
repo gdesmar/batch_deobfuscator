@@ -51,3 +51,18 @@ def test_extract_powershell(statement, extracted_ps1):
     else:
         assert len(deobfuscator.exec_ps1) == 1
         assert deobfuscator.exec_ps1[0] == extracted_ps1
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "powershell.exe Invoke-WebRequest -uri",
+        "powershell.exe iwr -uri http://example.com/a.exe -outfile",
+        "powershell.exe iwr -h",
+        "powershell.exe iwr --help",
+    ],
+)
+def test_invoke_webrequest_malformed_does_not_exit(statement):
+    deobfuscator = BatchDeobfuscator()
+    deobfuscator.interpret_powershell(statement)
+    assert len(deobfuscator.traits["download"]) == 0
