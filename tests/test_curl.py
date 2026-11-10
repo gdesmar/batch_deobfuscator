@@ -95,3 +95,27 @@ def test_curl_extraction(statement, download_trait):
     else:
         assert len(deobfuscator.traits["download"]) == 1
         assert deobfuscator.traits["download"][0] == download_trait
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "curl",
+        "curl -s",
+        "curl -o out.txt",
+        "curl https://example.com -o",
+        "curl -h",
+        "curl --help",
+        "curl.exe -X",
+    ],
+)
+def test_curl_malformed_does_not_exit(statement):
+    deobfuscator = BatchDeobfuscator()
+    deobfuscator.interpret_curl(statement)
+    assert len(deobfuscator.traits["download"]) == 0
+
+
+def test_curl_malformed_via_interpret_command():
+    deobfuscator = BatchDeobfuscator()
+    deobfuscator.interpret_command("curl -o out.txt")
+    assert len(deobfuscator.traits["download"]) == 0
